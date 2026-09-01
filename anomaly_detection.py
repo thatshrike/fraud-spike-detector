@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
+from sklearn.ensemble import IsolationForest
 
 def detect_anomalies_zscore(df, window=24, threshold=3.0):
     """
@@ -54,4 +55,37 @@ def evaluate_predictions(df):
     print(f"False Positives (FP): {fp}")
     print(f"True Negatives (TN):  {tn}")
     print(f"False Negatives (FN): {fn}")
+
+def detect_anomalies_isolationforest(df, contamination=0.02, random_state=42):
+    """
+    Detect anomalous spikes in transaction data using sklearn's IsolationForest.
+    """
+    df_out = df.copy()
+    
+    # Feature engineering
+    rolling = df_out['transaction_count'].rolling(window=24, min_periods=1)
+    df_out['rolling_mean_24h'] = rolling.mean()
+    df_out['rolling_std_24h'] = rolling.std()
+    df_out['deviation'] = df_out['transaction_count'] - df_out['rolling_mean_24h']
+    
+    # Fill NaNs resulting from rolling operations with 0
+    df_out['rolling_mean_24h'] = df_out['rolling_mean_24h'].fillna(0)
+    df_out['rolling_std_24h'] = df_out['rolling_std_24h'].fillna(0)
+    df_out['deviation'] = df_out['deviation'].fillna(0)
+    
+    features = ['transaction_count', 'rolling_mean_24h', 'rolling_std_24h', 'deviation']
+    X = df_out[features]
+    
+    # Initialize and fit the model
+    model = IsolationForest(contamination=contamination, random_state=random_state)
+    model.fit(X)
+    
+    # Predict (-1 for anomaly, 1 for normal)
+    preds = model.predict(X)
+    df_out['predicted_anomaly'] = (preds == -1)
+    
+    # Add continuous score for threshold sweeping (lower = more anomalous)
+    df_out['score'] = model.decision_function(X)
+    
+    return df_out
 
