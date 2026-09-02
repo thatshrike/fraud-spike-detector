@@ -35,6 +35,8 @@ Z-score's performance at its cost-optimal threshold was stable across four indep
 
 IsolationForest (contamination=0.02, fixed) achieved **recall = 1.00 on every one of the four datasets**, but precision stayed low (0.27–0.32) throughout. This consistency is worth reading carefully rather than celebrating outright — see Failure Modes below.
 
+An ensemble (flagging anomalies caught by either detector) was also tested across the same four datasets, achieving perfect recall (1.00) but the lowest precision (0.20–0.30) and F1 (0.33–0.46) of the three approaches — see Failure Modes point 5 for why this is an expected, informative negative result rather than a bug.
+
 ### Cost-sensitivity sweep
 
 | Assumed cost ratio (fraud : friction) | Optimal detector |
@@ -57,7 +59,9 @@ The crossover point sits between roughly **15:1 and 25:1**. Below that ratio, z-
 
 4. **Adversarial vulnerability — gradual ramping evades both detectors.** Both models are tuned to catch sudden, discrete spikes. A fraud pattern that ramps up gradually would likely evade both: z-score's rolling baseline would slowly absorb the drift, and IsolationForest's engineered features (which include rolling mean and deviation) would adapt alongside a slow-moving pattern rather than flagging it as anomalous. Neither model was tested against this attack pattern; a real deployment would need a complementary trend-detection method.
 
-## Failure Recovery (a real one, not hypothetical)
+5. **Naive OR-ensembling does not improve on the better individual detector.** Combining z-score and IsolationForest by flagging anomalies detected by either achieved perfect recall (1.00) but the worst precision (0.20–0.30) and F1 (0.40 avg) of all three approaches, across the same four datasets used for held-out validation. This is expected rather than surprising: IsolationForest alone already recalls ~99% of true anomalies, so there is little recall gap left for z-score to fill, while z-score's false positives are added on top regardless — the ensemble compounds errors instead of correcting them. A more effective combination strategy (e.g., requiring agreement from both detectors, or a weighted approach) was not tested here but is a natural next step.
+
+## Failure Recovery (not hypothetical)
 
 While adding the cost-sweep function to `anomaly_detection.py` mid-project, a new import (`run_cost_sweep`) failed with no clear error — the function existed in the file, but Colab's Python session had cached the module from before the edit. Diagnosed by checking the file contents directly against the import error, then resolved via a session restart (equivalent to `importlib.reload()` for a live session). Left in the commit history as its own commit rather than hidden, since it's a real, common gotcha when iterating on a `.py` module from a notebook.
 
