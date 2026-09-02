@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix
 from sklearn.ensemble import IsolationForest
+import matplotlib.pyplot as plt
 
 def detect_anomalies_zscore(df, window=24, threshold=3.0):
     """
@@ -89,3 +90,95 @@ def detect_anomalies_isolationforest(df, contamination=0.02, random_state=42):
     
     return df_out
 
+def run_cost_sweep(df_zscore, df_isoforest, fn_cost=500, fp_cost=25, thresholds=None):
+    """
+    Computes total business cost across a range of decision thresholds for z-score 
+    and IsolationForest detectors, and finds the threshold that minimizes cost.
+    """
+    if thresholds is None:
+        z_min, z_max = df_zscore['z_score'].min(), df_zscore['z_score'].max()
+        iso_min, iso_max = df_isoforest['score'].min(), df_isoforest['score'].max()
+        
+        z_thresholds = np.linspace(z_min, z_max, 50)
+        iso_thresholds = np.linspace(iso_min, iso_max, 50)
+    else:
+        z_thresholds = thresholds
+        iso_thresholds = thresholds
+        
+    results = []
+    
+    # Evaluate z-score
+    for t in z_thresholds:
+        pred = df_zscore['z_score'] > t
+        y_true = df_zscore['is_anomaly']
+        
+        fn = ((y_true == True) & (pred == False)).sum()
+        fp = ((y_true == False) & (pred == True)).sum()
+        
+        cost = fn * fn_cost + fp * fp_cost
+        
+        results.append({
+            'detector': 'Z-Score',
+            'threshold': t,
+            'FP': fp,
+            'FN': fn,
+            'total_cost': cost
+        })
+        
+    # Evaluate IsolationForest
+    for t in iso_thresholds:
+        pred = df_isoforest['score'] < t
+        y_true = df_isoforest['is_anomaly']
+        
+        fn = ((y_true == True) & (pred == False)).sum()
+        fp = ((y_true == False) & (pred == True)).sum()
+        
+        cost = fn * fn_cost + fp * fp_cost
+        
+        results.append({
+            'detector': 'IsolationForest',
+            'threshold': t,
+            'FP': fp,
+            'FN': fn,
+            'total_cost': cost
+        })
+        
+    df_results = pd.DataFrame(results)
+    
+    # Find optimums
+    z_res = df_results[df_results['detector'] == 'Z-Score']
+    iso_res = df_results[df_results['detector'] == 'IsolationForest']
+    
+    z_best = z_res.loc[z_res['total_cost'].idxmin()]
+    iso_best = iso_res.loc[iso_res['total_cost'].idxmin()]
+    
+    # Print summary
+    print("\n--- Cost Sweep Summary ---")
+    print(f"Z-Score Best: Threshold = {z_best['threshold']:.4f}, Cost = {z_best['total_cost']}")
+    print(f"IsolationForest Best: Threshold = {iso_best['threshold']:.4f}, Cost = {iso_best['total_cost']}")
+    
+    if z_best['total_cost'] < iso_best['total_cost']:
+        winner = "Z-Score"
+    elif iso_best['total_cost'] < z_best['total_cost']:
+        winner = "IsolationForest"
+    else:
+        winner = "Tie"
+    print(f"Overall Winner: {winner}")
+    
+    # Plot
+    plt.figure(figsize=(10, 6))
+    
+    plt.plot(z_res['threshold'], z_res['total_cost'], label='Z-Score', color='blue')
+    plt.scatter([z_best['threshold']], [z_best['total_cost']], color='blue', marker='*', s=200, zorder=5)
+    
+    plt.plot(iso_res['threshold'], iso_res['total_cost'], label='IsolationForest', color='orange')
+    plt.scatter([iso_best['threshold']], [iso_best['total_cost']], color='orange', marker='*', s=200, zorder=5)
+    
+    plt.xlabel('Threshold')
+    plt.ylabel('Total Cost')
+    plt.title('Cost Sweep by Detector')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    
+    return df_results
