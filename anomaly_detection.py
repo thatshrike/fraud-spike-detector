@@ -182,3 +182,23 @@ def run_cost_sweep(df_zscore, df_isoforest, fn_cost=500, fp_cost=25, thresholds=
     plt.show()
     
     return df_results
+
+def detect_anomalies_ensemble(df):
+    """
+    Detect anomalies using an ensemble of Z-Score and IsolationForest.
+    A data point is flagged as an anomaly if EITHER detector flags it
+    using the fixed thresholds.
+    """
+    z_threshold = 1.8177
+    iso_threshold = 0.0334
+    
+    df_z = detect_anomalies_zscore(df)
+    df_i = detect_anomalies_isolationforest(df)
+    
+    df_out = df.copy()
+    z_pred = df_z['z_score'].abs() > z_threshold
+    iso_pred = df_i['score'] < iso_threshold
+    
+    df_out['predicted_anomaly'] = z_pred | iso_pred
+    
+    return df_out
