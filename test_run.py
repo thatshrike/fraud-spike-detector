@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from anomaly_detection import detect_anomalies_zscore, detect_anomalies_isolationforest, evaluate_predictions, run_cost_sweep
 
 def generate_synthetic_transactions(num_days=90, seed=42, num_spikes=5, spike_strength=5.0):
     rng = np.random.default_rng(seed)
@@ -35,3 +36,25 @@ def generate_synthetic_transactions(num_days=90, seed=42, num_spikes=5, spike_st
     })
     return df
 
+if __name__ == "__main__":
+    print("Generating synthetic data...")
+    df = generate_synthetic_transactions(seed=123)
+    
+    print("Running anomaly detection...")
+    # Add predicted_anomaly column using our zscore function
+    df_predicted = detect_anomalies_zscore(df, window=24, threshold=3.0)
+    
+    print("Evaluating Z-Score predictions:")
+    evaluate_predictions(df_predicted)
+    
+    print("\n-----------------------------------\n")
+    
+    print("Running IsolationForest anomaly detection...")
+    df_iforest = detect_anomalies_isolationforest(df, contamination=0.02)
+    print("Evaluating IsolationForest predictions:")
+    evaluate_predictions(df_iforest)
+    
+    print("\n-----------------------------------\n")
+    
+    print("Running Cost Sweep Analysis...")
+    df_sweep = run_cost_sweep(df_predicted, df_iforest, fn_cost=500, fp_cost=25)
